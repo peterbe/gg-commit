@@ -20,6 +20,10 @@ installed if it's not already available::
 
     pip install gg-commit
 
+This plugin is ideally useful in conjunction with `gg-start
+<https://github.com/peterbe/gg-start>`_ which helps you create a new
+branch.
+
 How to develop
 ==============
 

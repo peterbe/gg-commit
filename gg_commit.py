@@ -3,17 +3,13 @@
 import os
 import time
 import re
-import getpass
-import urllib
-
 
 import git
 import click
 
-from gg.utils import error_out, get_repo, info_out, get_repo_name
-from gg.state import save, read
+from gg.utils import error_out, get_repo, info_out, get_repo_name, success_out
+from gg.state import read
 from gg.main import cli, pass_config
-from gg.builtins import bugzilla
 from gg.builtins import github
 
 
@@ -25,22 +21,13 @@ from gg.builtins import github
 )
 @pass_config
 def commit(config, no_verify):
-    """Commit the current branch."""
+    """Commit the current branch with all files."""
     try:
         repo = get_repo()
     except git.InvalidGitRepositoryError as exception:
         error_out('"{}" is not a git repository'.format(exception.args[0]))
 
-    # untracked_files = repo.untracked_files
-    # status = repo.index.diff(None)
-    # untracked_files will list ALL files, even those inside sub-directories
-    # print(repo.head)
-    # print(dir(repo))
-    # print(type(repo.head))
-    # print(repr(repo.head.name))
-
     active_branch = repo.active_branch
-    # print(repr(active_branch.name))
     if active_branch.name == 'master':
         error_out(
             "Can't commit when on the master branch. "
@@ -51,7 +38,6 @@ def commit(config, no_verify):
 
     for path in repo.untracked_files:
         age = now - os.stat(path).st_mtime
-        # age_friendly = human_seconds(age)
         root = path.split(os.path.sep)[0]
         if root in untracked_files:
             if age < untracked_files[root]:
@@ -86,8 +72,6 @@ def commit(config, no_verify):
             print("")
 
     state = read(config.configfile)
-    # state = load()
-    # this_repo_name = get_repo_name()
 
     # Replace this with gg.state.load(configfile, active_branch.name) XXX
     key = '{}:{}'.format(get_repo_name(), active_branch.name)
@@ -98,13 +82,6 @@ def commit(config, no_verify):
             "You're in a branch that was not created with gg.\n"
             "No branch information available."
         )
-
-    from pprint import pprint
-    # print("STATE", state)
-    # pprint(state)
-    # print('-')
-    # pprint(data)
-    # print("DATA", data)
 
     if data.get('bugnumber'):
         msg = 'bug {} - {}'.format(data['bugnumber'], data['description'])
@@ -124,7 +101,8 @@ def commit(config, no_verify):
             error_out('Commit cancelled')
         msg = try_again
 
-    if data['bugnumber']:  # XXX need to distinguish between bugzilla and github
+    # XXX need to distinguish between bugzilla and github
+    if data['bugnumber']:
         fixes = input(
             'Add the "fixes" prefix? [N/y] '
         ).lower().strip()
@@ -134,13 +112,14 @@ def commit(config, no_verify):
     # Now we're going to do the equivalent of `git commit -a -m "..."`
     index = repo.index
     # add every file
+    # XXX Maybe a faster approach is to loop over all staged and modified
+    # files (modified: `repo.index.diff(None)`,
+    # staged: `repo.index.diff('HEAD')`) and fish out the paths from that.
     files = [path for path, stage in repo.index.entries.keys()]
     if not files:
         error_out("No files to add")
-    print(files)
     if not repo.is_dirty():
         error_out("Branch is not dirty. There is nothing to commit.")
-    # error_out('test')
     index.add(files)
     try:
         commit = index.commit(msg)
@@ -157,15 +136,13 @@ def commit(config, no_verify):
             else:
                 error_out('Commit hook failed.')
         else:
+            # See https://github.com/gitpython-developers/GitPython/issues/468
             raise NotImplementedError(
                 "Need to commit without executing the commit hooks"
             )
 
     if config.verbose:
-        print("COMMIT", repr(commit))
-        print(dir(commit))
-        # XXX
-        success_out('Need to say something about the commit')
+        success_out('Commit created {}'.format(commit.hexsha))
 
     if not state.get('FORK_NAME'):
         info_out(
@@ -186,6 +163,10 @@ def commit(config, no_verify):
     if push_for_you not in ('n', 'no'):
         destination = repo.remotes[state['FORK_NAME']]
         destination.push()
+    else:
+        # If you don't want to push, then don't bother with GitHub
+        # Pull Request stuff.
+        return 0
 
     if not state.get('GITHUB'):
         if config.verbose:
@@ -199,18 +180,34 @@ def commit(config, no_verify):
     rest = re.split('github\.com[:/]', origin.url)[1]
     org, repo = rest.split('.git')[0].split('/', 1)
 
-    github_url = 'https://github.com/{}/{}/compare/{}:{}...{}:{}?expand=1'
-    github_url = github_url.format(
-        org,
-        repo,
-        org,
-        'master',
-        state['FORK_NAME'],
-        active_branch.name
-    )
-    print("Now, to make a Pull Request, go to:")
-    print("")
-    print(url)
+    # Search for an existing open pull request, and remind us of the link
+    # to it.
+    search = {
+        'head': '{}:{}'.format(
+            state['FORK_NAME'],
+            active_branch.name,
+        ),
+        'state': 'open',
+    }
+    for pull_request in github.find_pull_requests(config, org, repo, **search):
+        print("Pull Request already created:")
+        print("")
+        print("\t", pull_request['html_url'])
+        break
+    else:
+        # If no known Pull Request exists, make a link to create a new one.
+        github_url = 'https://github.com/{}/{}/compare/{}:{}...{}:{}?expand=1'
+        github_url = github_url.format(
+            org,
+            repo,
+            org,
+            'master',
+            state['FORK_NAME'],
+            active_branch.name,
+        )
+        print("Now, to make a Pull Request, go to:")
+        print("")
+        print(github_url)
     print("(⌘-click to open URLs)")
 
     return 0
@@ -241,12 +238,13 @@ def _humanize_time(amount, units):
     unit = [x[1] for x in names].index(units)
     # Convert to seconds
     amount = amount * intervals[unit]
-    for i in range(len(names)-1, -1, -1):
+    for i in range(len(names) - 1, -1, -1):
         a = int(amount) // intervals[i]
         if a > 0:
             result.append((a, names[i][1 % a]))
             amount -= a * intervals[i]
     return result
+
 
 def humanize_seconds(seconds):
     parts = [
@@ -254,117 +252,3 @@ def humanize_seconds(seconds):
         for x, y in _humanize_time(seconds, 'seconds')
     ]
     return ' '.join(parts)
-
-
-
-# def get_summary(config, bugnumber):
-#     """return a summary for this bug/issue. If it can't be found,
-#     return None."""
-#
-#     bugzilla_url_regex = re.compile(
-#         re.escape('https://bugzilla.mozilla.org/show_bug.cgi?id=') + '(\d+)$'
-#     )
-#
-#     # The user could have pasted in a bugzilla ID or a bugzilla URL
-#     if bugzilla_url_regex.search(bugnumber.split('#')[0]):
-#         # that's easy then!
-#         bugzilla_id, = bugzilla_url_regex.search(
-#             bugnumber.split('#')[0]
-#         ).groups()
-#         bugzilla_id = int(bugzilla_id)
-#         summary, url = bugzilla.get_summary(config, bugzilla_id)
-#         return summary, bugzilla_id, url
-#
-#     # The user could have pasted in a GitHub issue URL
-#     github_url_regex = re.compile(
-#         'https://github.com/([^/]+)/([^/]+)/issues/(\d+)'
-#     )
-#     if github_url_regex.search(bugnumber.split('#')[0]):
-#         # that's also easy
-#         org, repo, id_, = github_url_regex.search(
-#             bugnumber.split('#')[0]
-#         ).groups()
-#         id_ = int(id_)
-#         title, url = github.get_title(
-#             config,
-#             org,
-#             repo,
-#             id_
-#         )
-#         return title, id_, url
-#
-#     # If it's a number it can be either a github issue or a bugzilla bug
-#     if bugnumber.isdigit():
-#         # try both and see if one of them turns up something interesting
-#
-#         repo = get_repo()
-#         state = read(config.configfile)
-#         fork_name = state.get('FORK_NAME', getpass.getuser())
-#         if config.verbose:
-#             info_out('Using fork name: {}'.format(fork_name))
-#         candidates = []
-#         # Looping over the remotes, let's figure out which one
-#         # is the one that has issues. Let's try every one that isn't
-#         # your fork remote.
-#         for origin in repo.remotes:
-#             if origin.name == fork_name:
-#                 continue
-#             url = origin.url
-#             org, repo = parse_remote_url(origin.url)
-#             github_title, github_url = github.get_title(
-#                 config,
-#                 org,
-#                 repo,
-#                 int(bugnumber)
-#             )
-#             if github_title:
-#                 candidates.append((
-#                     github_title,
-#                     int(bugnumber),
-#                     github_url,
-#                 ))
-#
-#         bugzilla_summary, bugzilla_url = bugzilla.get_summary(
-#             config,
-#             bugnumber
-#         )
-#         if bugzilla_summary:
-#             candidates.append((
-#                 bugzilla_summary,
-#                 int(bugnumber),
-#                 bugzilla_url,
-#             ))
-#
-#         if len(candidates) > 1:
-#             info_out(
-#                 'Input is ambiguous. Multiple possibilities found. '
-#                 'Please re-run with the full URL:'
-#             )
-#             for title, _, url in candidates:
-#                 info_out('\t{}'.format(url))
-#                 info_out('\t{}\n'.format(title))
-#             error_out('Awaiting your choice')
-#         elif len(candidates) == 1:
-#             return candidates[0]
-#         else:
-#             error_out('ID could not be found on GitHub or Bugzilla')
-#         raise Exception(bugnumber)
-#
-#     return bugnumber, None, None
-#
-#
-# def parse_remote_url(url):
-#     """return a tuple of (org, repo) from the remote git URL"""
-#     # The URL will either be git@github.com:org/repo.git or
-#     # https://github.com/org/repo.git and in both cases
-#     # it's not guarantee that the domain is github.com.
-#     # FIXME: Make it work non-github.com domains
-#     if url.startswith('git@'):
-#         path = url.split(':', 1)[1]
-#     else:
-#         parsed = urllib.parse.urlparse(url)
-#         path = parsed.path[1:]
-#
-#     assert path.endswith('.git'), path
-#     path = path[:-4]
-#     return path.split('/')
