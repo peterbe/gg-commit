@@ -51,7 +51,9 @@ def test_commit(temp_configfile, mocker):
         'myusername': my_remote,
         'origin': origin_remote,
     }
-
+    my_pushinfo = mock.MagicMock()
+    my_pushinfo.flags = 0
+    my_remote.push.return_value = [my_pushinfo]
     # first we have to fake some previous information
     state = json.load(open(temp_configfile))
     state['gg-commit-test:my-topic-branch'] = {
@@ -70,6 +72,7 @@ def test_commit(temp_configfile, mocker):
     config = Config()
     config.configfile = temp_configfile
     result = runner.invoke(commit, [], input='\n\n', obj=config)
+
     assert result.exit_code == 0
     assert not result.exception
     pr_url = (
@@ -96,6 +99,17 @@ def test_commit_without_github(temp_configfile, mocker):
     state['FORK_NAME'] = 'myusername'
     with open(temp_configfile, 'w') as f:
         json.dump(state, f)
+
+    my_remote = mock.MagicMock()
+    origin_remote = mock.MagicMock()
+    origin_remote.url = 'git@github.com:peterbe/gg-example.git'
+    mocked_git().remotes = {
+        'myusername': my_remote,
+        'origin': origin_remote,
+    }
+    my_pushinfo = mock.MagicMock()
+    my_pushinfo.flags = 0
+    my_remote.push.return_value = [my_pushinfo]
 
     runner = CliRunner()
     config = Config()

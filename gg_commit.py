@@ -13,6 +13,7 @@ from gg.main import cli, pass_config
 from gg.builtins import github
 
 
+# a chang.
 @cli.command()
 @click.option(
     '-n', '--no-verify',
@@ -89,17 +90,17 @@ def commit(config, no_verify):
         msg = data['description']
 
     print('Commit message:')
-    print('\t', msg)
-    print('')
+    # print('\t', msg)
+    # print('')
 
-    confirm = input('OK? [Y/n] ').lower().strip()
-    if confirm in ('n', 'no'):
-        try_again = input(
-            'Type a new commit message (or empty to exit): '
-        ).strip()
-        if not try_again:
-            error_out('Commit cancelled')
-        msg = try_again
+    msg = input('"{}" '.format(msg)).strip() or msg
+    # if confirm in ('n', 'no'):
+    #     try_again = input(
+    #         'Type a new commit message (or empty to exit): '
+    #     ).strip()
+    #     if not try_again:
+    #         error_out('Commit cancelled')
+    #     msg = try_again
 
     # XXX need to distinguish between bugzilla and github
     if data['bugnumber']:
@@ -162,7 +163,28 @@ def commit(config, no_verify):
     ).lower().strip()
     if push_for_you not in ('n', 'no'):
         destination = repo.remotes[state['FORK_NAME']]
-        destination.push()
+        pushed, = destination.push()
+        # Was it rejected?
+        if (
+            pushed.flags & git.remote.PushInfo.REJECTED or
+            pushed.flags & git.remote.PushInfo.REMOTE_REJECTED
+        ):
+            error_out(
+                'The push was rejected ("{}")'.format(
+                    pushed.summary
+                ),
+                False,
+            )
+
+            try_force_push = input(
+                'Try to force push? [Y/n] '
+            ).lower().strip()
+            if try_force_push not in ('no', 'n'):
+                pushed, = destination.push(force=True)
+                info_out(pushed.summary)
+            else:
+                return 0
+
     else:
         # If you don't want to push, then don't bother with GitHub
         # Pull Request stuff.
