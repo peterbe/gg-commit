@@ -97,7 +97,7 @@ def commit(config, no_verify):
     else:
         msg = data['description']
 
-    print('Commit message:')
+    print('Commit message: (type a new one if you want to override)')
 
     msg = input('"{}" '.format(msg)).strip() or msg
     # if confirm in ('n', 'no'):
