@@ -11,7 +11,6 @@ from gg.utils import (
     error_out,
     get_repo,
     info_out,
-    get_repo_name,
     success_out,
     is_github,
     is_bugzilla,
