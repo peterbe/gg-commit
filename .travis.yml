@@ -19,3 +19,11 @@ after_success:
 branches:
   only:
   - master
+deploy:
+  provider: pypi
+  user: peterbe
+  password:
+    secure: KtWioy+NZtAQblu9hOMVuXgsQA+0Z4iG0vn0+UNG3E6y6oSrWrMs+a5KslqjkX2bgLUoanwa5kjuvPa1TKAznCDDL1vnRvEIZ46xlo72rZESsoOuA64Tkkk8cCrS84pCzi4HzZq/21PN5Br2UeXABC+bQfajwL8r5KLdlKHZ7NFfTHJ37FhdkmV8fx6CZL+bZKk/lEr/e3OuKaardTlN1szvR9+r2xL6i7q87+O9O5yLnXN5WRzTN084IXYSNa3Jg04/8ZqZ1a8CRKkzNiejg5GGVCqh04bDaPlLyyjk+6gZ2oozRavKhgxov3IrBDoDePHRLc+INwTBKP0sC0oRGXE9uGfuTuCQpmsN4d/Ai8xS4MSS1d7j8stdacz/KfZuBwdafjfrnaZROp6f2dwwasl8bMtjCbCHZmm202bSUWuFaaqbmdhrSDf56BDiKdD9RiAw5el/3L24QA1bSjQliQ4Gg7TaYiy5LSOOEOi42X7nROQCMugsyA5q1MG1Gp4V473lR38R7KMw3cdFROtfwyMHrFG2Rn23PXzJX4zyBgQLHJ5mkSDgJYEKunaiSpsNyN9+aTXfjh6RUCtTuc+3kiiG/+tgZjKi4Abq0O5Vmoj697ebfCAXReypu4TGluyhN6OyUQblRgpEHl/VoUIjrOR2Y+k+c2upuQb2tjomOLo=
+  distributions: sdist bdist_wheel
+  on:
+    repo: peterbe/gg-commit
