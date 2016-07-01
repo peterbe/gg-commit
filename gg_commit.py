@@ -122,7 +122,7 @@ def commit(config, no_verify):
             if is_bugzilla(data):
                 msg = 'fixes ' + msg
             elif is_github(data):
-                msg += ', fixes {}'.format(data['bugnumber'])
+                msg += ', fixes #{}'.format(data['bugnumber'])
             else:
                 raise NotImplementedError
 
