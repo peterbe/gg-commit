@@ -11,12 +11,11 @@ from gg.utils import (
     error_out,
     get_repo,
     info_out,
-    get_repo_name,
     success_out,
     is_github,
     is_bugzilla,
 )
-from gg.state import read
+from gg.state import read, load
 from gg.main import cli, pass_config
 from gg.builtins import github
 
@@ -82,10 +81,8 @@ def commit(config, no_verify):
 
     state = read(config.configfile)
 
-    # Replace this with gg.state.load(configfile, active_branch.name) XXX
-    key = '{}:{}'.format(get_repo_name(), active_branch.name)
     try:
-        data = state[key]
+        data = load(config.configfile, active_branch.name)
     except KeyError:
         error_out(
             "You're in a branch that was not created with gg.\n"
