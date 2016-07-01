@@ -100,13 +100,6 @@ def commit(config, no_verify):
     print('Commit message: (type a new one if you want to override)')
 
     msg = input('"{}" '.format(msg)).strip() or msg
-    # if confirm in ('n', 'no'):
-    #     try_again = input(
-    #         'Type a new commit message (or empty to exit): '
-    #     ).strip()
-    #     if not try_again:
-    #         error_out('Commit cancelled')
-    #     msg = try_again
 
     if data['bugnumber']:
         if is_bugzilla(data):
