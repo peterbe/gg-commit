@@ -7,7 +7,15 @@ import re
 import git
 import click
 
-from gg.utils import error_out, get_repo, info_out, get_repo_name, success_out
+from gg.utils import (
+    error_out,
+    get_repo,
+    info_out,
+    get_repo_name,
+    success_out,
+    is_github,
+    is_bugzilla,
+)
 from gg.state import read
 from gg.main import cli, pass_config
 from gg.builtins import github
@@ -90,8 +98,6 @@ def commit(config, no_verify):
         msg = data['description']
 
     print('Commit message:')
-    # print('\t', msg)
-    # print('')
 
     msg = input('"{}" '.format(msg)).strip() or msg
     # if confirm in ('n', 'no'):
@@ -102,13 +108,23 @@ def commit(config, no_verify):
     #         error_out('Commit cancelled')
     #     msg = try_again
 
-    # XXX need to distinguish between bugzilla and github
     if data['bugnumber']:
-        fixes = input(
-            'Add the "fixes" prefix? [N/y] '
-        ).lower().strip()
+        if is_bugzilla(data):
+            question = 'Add the "fixes" prefix? [N/y] '
+        elif is_github(data):
+            question = 'Add the "fixes" suffix? [N/y] '
+        else:
+            raise NotImplementedError(
+                "Don't know what issue tracker you use :("
+            )
+        fixes = input(question).lower().strip()
         if fixes in ('y', 'yes'):
-            msg = 'fixes ' + msg
+            if is_bugzilla(data):
+                msg = 'fixes ' + msg
+            elif is_github(data):
+                msg += ', fixes {}'.format(data['bugnumber'])
+            else:
+                raise NotImplementedError
 
     # Now we're going to do the equivalent of `git commit -a -m "..."`
     index = repo.index
@@ -137,10 +153,7 @@ def commit(config, no_verify):
             else:
                 error_out('Commit hook failed.')
         else:
-            # See https://github.com/gitpython-developers/GitPython/issues/468
-            raise NotImplementedError(
-                "Need to commit without executing the commit hooks"
-            )
+            commit = index.commit(msg, skip_hooks=True)
 
     if config.verbose:
         success_out('Commit created {}'.format(commit.hexsha))
